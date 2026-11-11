@@ -73,6 +73,8 @@ async def settings_handler(message: Message) -> None:
 
 
 async def main() -> None:
+    if not settings.bot_token:
+        raise RuntimeError("BOT_TOKEN is required to start the Telegram bot service.")
     bot = Bot(settings.bot_token)
     try:
         await dp.start_polling(bot)
