@@ -2,10 +2,10 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.config import settings
-from app.db import SessionLocal
+from app.db import SessionLocal, engine
 from app.models import User
 from app.services import add_inn, list_inns, remove_inn, ServiceError
 
@@ -76,10 +76,18 @@ async def main() -> None:
     if not settings.bot_token:
         raise RuntimeError("BOT_TOKEN is required to start the Telegram bot service.")
     bot = Bot(settings.bot_token)
+    # Serialize polling across overlapping Railway deployments. PostgreSQL releases
+    # this session-level advisory lock automatically if a container is terminated.
     try:
-        await dp.start_polling(bot)
+        async with engine.connect() as lock_connection:
+            await lock_connection.execute(text("SELECT pg_advisory_lock(9296287990)"))
+            try:
+                await dp.start_polling(bot)
+            finally:
+                await lock_connection.execute(text("SELECT pg_advisory_unlock(9296287990)"))
     finally:
         await bot.session.close()
+        await engine.dispose()
 
 
 if __name__ == "__main__":
